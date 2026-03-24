@@ -136,21 +136,51 @@ if (TARGET Eigen3::Eigen)
   target_link_libraries(test_eigen_ext PRIVATE Eigen3::Eigen)
 endif()
 
-# C++26 static reflection (P2996) test — only built if the compiler supports it
+# C++26 static reflection (P2996) test — only built if the compiler supports it.
+# GCC trunk uses -freflection and has template-for built in.
+# Bloomberg clang-p2996 uses -freflection-latest (includes -fexpansion-statements
+# and -fparameter-reflection) and requires -stdlib=libc++ for <meta>.
 include(CheckCXXSourceCompiles)
 set(CMAKE_REQUIRED_FLAGS_OLD "${CMAKE_REQUIRED_FLAGS}")
-set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++26 -freflection")
-check_cxx_source_compiles("
-#if !defined(__cpp_reflection) && !defined(__cpp_impl_reflection)
-#error No reflection support
-#endif
-int main() { return 0; }
-" NB_HAS_REFLECTION)
+
+# Test source that exercises template-for and define_static_array — these
+# require different flags on GCC vs Bloomberg, so this distinguishes them.
+set(NB_REFLECT_CHECK_SRC "
+#include <meta>
+struct S { int x; double y; };
+consteval int count() {
+    int n = 0;
+    template for (constexpr auto m :
+        std::define_static_array(std::meta::nonstatic_data_members_of(
+            ^^S, std::meta::access_context::unchecked())))
+        ++n;
+    return n;
+}
+int main() { static_assert(count() == 2); }
+")
+
+# GCC: -freflection enables everything including template-for
+set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS_OLD} -std=c++26 -freflection")
+check_cxx_source_compiles("${NB_REFLECT_CHECK_SRC}" NB_HAS_REFLECTION_GCC)
+
+if (NOT NB_HAS_REFLECTION_GCC)
+  # Bloomberg: needs -freflection-latest and -stdlib=libc++
+  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS_OLD} -std=c++26 -freflection-latest -stdlib=libc++")
+  check_cxx_source_compiles("${NB_REFLECT_CHECK_SRC}" NB_HAS_REFLECTION_BLOOMBERG)
+endif()
+
 set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS_OLD}")
 
-if (NB_HAS_REFLECTION)
+if (NB_HAS_REFLECTION_GCC)
+  set(NB_REFLECT_FLAGS -std=c++26 -freflection)
+elseif(NB_HAS_REFLECTION_BLOOMBERG)
+  set(NB_REFLECT_FLAGS -std=c++26 -freflection-latest -stdlib=libc++)
+endif()
+
+if (NB_REFLECT_FLAGS)
   nanobind_add_module(test_reflect_ext test_reflect.cpp ${NB_EXTRA_ARGS})
-  target_compile_options(test_reflect_ext PRIVATE -std=c++26 -freflection)
+  target_compile_options(test_reflect_ext PRIVATE ${NB_REFLECT_FLAGS})
+  target_link_options(test_reflect_ext PRIVATE ${NB_REFLECT_FLAGS})
 endif()
 
 add_library(
