@@ -1,7 +1,7 @@
 /*
-    nanobind/nb_reflect.h: Automatic binding via C++26 static reflection
+    nanobind/nb_reflect.h: Automatic binding via C++26 static reflection (P2996)
 
-    Requires GCC with -std=c++26 -freflection
+    Requires a compiler with P2996 support (e.g. GCC 16+, Bloomberg clang-p2996)
 
     Copyright (c) 2025 Matthew Kolbe
 
@@ -141,8 +141,12 @@ consteval auto ctor_param_infos() {
 
 template <std::meta::info ctor, std::size_t... Is>
 void reflect_bind_ctor_expand(auto& cls, std::index_sequence<Is...>) {
-    constexpr auto params = ctor_param_infos<ctor>();
-    cls.def(init<typename [:std::meta::type_of(params[Is]):]...>());
+    if constexpr (sizeof...(Is) == 0) {
+        cls.def(init<>());
+    } else {
+        constexpr auto params = ctor_param_infos<ctor>();
+        cls.def(init<typename [:std::meta::type_of(params[Is]):]...>());
+    }
 }
 
 template <std::meta::info ctor>
@@ -235,6 +239,8 @@ void reflect_dispatch(module_& m) {
             } else if constexpr (std::meta::is_function(mem)
                 && !std::meta::is_template(mem)) {
                 reflect_free_function<mem>(m);
+            } else if constexpr (std::meta::is_namespace(mem)) {
+                reflect_dispatch<mem>(m);
             }
         };
     } else if constexpr (std::meta::is_type(r)
