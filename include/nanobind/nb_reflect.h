@@ -11,7 +11,7 @@
 
 #pragma once
 
-#if defined(__cpp_reflection) || defined(__cpp_impl_reflection)
+#if __has_include(<meta>)
 
 #include <meta>
 #include "nanobind.h"
@@ -268,4 +268,4 @@ void reflect_(module_& m) {
 
 NAMESPACE_END(NB_NAMESPACE)
 
-#endif // __cpp_reflection || __cpp_impl_reflection
+#endif // __has_include(<meta>)
