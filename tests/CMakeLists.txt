@@ -136,6 +136,23 @@ if (TARGET Eigen3::Eigen)
   target_link_libraries(test_eigen_ext PRIVATE Eigen3::Eigen)
 endif()
 
+# C++26 static reflection (P2996) test — only built if the compiler supports it
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS_OLD "${CMAKE_REQUIRED_FLAGS}")
+set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++26 -freflection")
+check_cxx_source_compiles("
+#if !defined(__cpp_reflection) && !defined(__cpp_impl_reflection)
+#error No reflection support
+#endif
+int main() { return 0; }
+" NB_HAS_REFLECTION)
+set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS_OLD}")
+
+if (NB_HAS_REFLECTION)
+  nanobind_add_module(test_reflect_ext test_reflect.cpp ${NB_EXTRA_ARGS})
+  target_compile_options(test_reflect_ext PRIVATE -std=c++26 -freflection)
+endif()
+
 add_library(
   inter_module
   SHARED
@@ -178,6 +195,7 @@ set(TEST_FILES
   test_typing.py
   test_thread.py
   test_specialization.py
+  test_reflect.py
 
   # Stub reference files
   test_classes_ext.pyi.ref
